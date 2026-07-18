@@ -57,17 +57,43 @@ def record_decision(
 
 
 def _ship(record: DecisionRecord, server_url: str) -> None:
-    """Best-effort POST of a record to ``{server_url}/decisions``."""
+    """Best-effort POST of a record to ``{server_url}/decisions``.
+
+    On success  → prints "[nexus] decision <id> → server OK"
+    On any failure → prints a clear WARNING so the caller knows the dashboard
+                     will be empty until the server actually receives the data.
+    The agent is never killed regardless of outcome.
+    """
     url = server_url.rstrip("/") + "/decisions"
     try:
-        import requests  # imported lazily so the SDK works offline
+        try:
+            import requests
+        except ImportError:
+            _warn_unreachable(record.decision_id, "requests package not installed")
+            return
 
-        requests.post(url, data=record.to_json(), timeout=5,
-                      headers={"Content-Type": "application/json"})
-    except Exception as exc:  # noqa: BLE001 - never break the agent
-        # In a hackathon build we just warn; production would use structured logging.
-        print(f"[nexus-sdk] warning: failed to ship decision {record.decision_id}: {exc}",
-              file=sys.stderr)
+        resp = requests.post(
+            url,
+            data=record.to_json(),
+            timeout=5,
+            headers={"Content-Type": "application/json"},
+        )
+        resp.raise_for_status()
+        print(
+            f"[nexus] decision {record.decision_id} → server OK",
+            file=sys.stderr,
+        )
+    except Exception as exc:  # noqa: BLE001 - fire-and-forget; never crash the agent
+        _warn_unreachable(record.decision_id, exc)
+
+
+def _warn_unreachable(decision_id: str, reason: object) -> None:
+    print(
+        f"[nexus] WARNING: server unreachable, saved to local file only\n"
+        f"        (dashboard will be empty until server receives data)\n"
+        f"        decision={decision_id}  reason={reason}",
+        file=sys.stderr,
+    )
 
 
 __all__ = ["DecisionRecord", "record_decision"]

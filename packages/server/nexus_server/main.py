@@ -83,6 +83,41 @@ def list_runs() -> dict:
     return {"runs": db.list_run_ids()}
 
 
+@app.get("/aggregate")
+def get_aggregate() -> dict:
+    """Aggregate metrics across all stored decisions.
+
+    total_opportunity_cost = sum of (chosen.cost - cheapest_alt.cost) per decision.
+    """
+    run_ids = db.list_run_ids()
+    total_decisions = 0
+    total_chosen_cost = 0.0
+    total_opportunity_cost = 0.0
+
+    for rid in run_ids:
+        for payload_json in db.get_decisions_for_run(rid):
+            record = from_json(payload_json)
+            total_decisions += 1
+            chosen_cost = float(record.chosen.get("cost") or 0)
+            total_chosen_cost += chosen_cost
+            alt_costs = [
+                float(a["cost"])
+                for a in record.alternatives
+                if a.get("cost") is not None
+            ]
+            if alt_costs:
+                savings = chosen_cost - min(alt_costs)
+                if savings > 0:
+                    total_opportunity_cost += savings
+
+    return {
+        "total_decisions": total_decisions,
+        "total_chosen_cost": round(total_chosen_cost, 2),
+        "total_opportunity_cost": round(total_opportunity_cost, 2),
+        "runs_count": len(run_ids),
+    }
+
+
 @app.post("/replay")
 async def replay(request: Request) -> dict:
     """Replay a discarded alternative and return the diff.

@@ -64,22 +64,51 @@ Serialization helpers: `to_dict` / `to_json` / `from_dict` / `from_json` (plus
 matching methods on the dataclass). **Opportunity cost is derived**
 (`alternative.cost - chosen.cost`) via `DecisionRecord.opportunity_costs()`.
 
-## Quick start
+## Quick start — 한 방
 
 ```bash
-# 1. Verify the shared schema imports with no dependencies
+./run_demo.sh
+```
+
+서버 기동 → 데모 데이터 적재 → 대시보드 오픈까지 한 번에 실행됩니다.
+`Ctrl+C` 한 번으로 서버·대시보드 프로세스를 모두 정리합니다.
+
+| 접속 | 주소 |
+|---|---|
+| 대시보드 | http://localhost:5173 |
+| API 서버 | http://localhost:8000 |
+
+대시보드에서 회색 대안 노드(escalate, partial_refund 등)를 클릭하면 오른쪽에
+replay diff 패널이 열립니다.
+
+### 최초 설치 (한 번만)
+
+```bash
+# Python 의존성
+pip install -e packages/sdk -e packages/server
+
+# 대시보드 Node 의존성
+cd packages/dashboard && npm install && cd ../..
+```
+
+### 수동 실행 (터미널 분리 운용)
+
+```bash
+# 터미널 A — 서버
+PYTHONPATH="packages/server:." NEXUS_DB_PATH=nexus.db \
+  uvicorn nexus_server.main:app --reload
+
+# 터미널 B — 데모 데이터 적재
+NEXUS_SERVER=http://localhost:8000 python demo/refund_agent.py
+
+# 터미널 C — 대시보드
+cd packages/dashboard && npm run dev
+```
+
+### 스키마 검증
+
+```bash
 python -c "from contracts.schema import DecisionRecord; print('ok')"
-
-# 2. Install the SDK (editable)
-pip install -e packages/sdk
-
-# 3. Run the demo agent (prints chosen + opportunity costs)
-python demo/refund_agent.py
-
-# 4. (optional) Run the server, then ship demo records to it
-pip install -e packages/server
-uvicorn nexus_server.main:app --reload            # terminal A
-NEXUS_SERVER=http://localhost:8000 python demo/refund_agent.py   # terminal B
 ```
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for more.
