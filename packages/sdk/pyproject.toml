@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexus-sdk"
+version = "0.1.0"
+description = "Nexus SDK — instrument AI agents to capture decision records (chosen + discarded alternatives)."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    # HTTP client used to ship records to the Nexus server. stdlib fallback exists.
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["nexus_sdk"]
+
+[tool.setuptools.package-dir]
+nexus_sdk = "nexus_sdk"

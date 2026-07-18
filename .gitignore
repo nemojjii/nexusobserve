@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Nexus
+nexus.db
+*.sqlite
+*.sqlite3
+
+# Node / dashboard
+node_modules/
+packages/dashboard/dist/
+.vite/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
