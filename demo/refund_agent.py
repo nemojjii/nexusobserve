@@ -1,9 +1,8 @@
-"""Refund demo agent — narrative stub showing how Nexus captures a decision.
+"""Refund demo agent — shows how Nexus captures a decision with discarded alternatives.
 
-A tiny "customer support" agent decides how to handle a refund request. It
-enumerates candidate actions (full refund / partial refund / deny), scores them,
-picks one, and records the decision — chosen + discarded alternatives — via the
-Nexus SDK.
+A customer-support agent decides how to handle a refund request. It enumerates
+four candidate actions, scores them, picks one, and records the decision —
+chosen + discarded alternatives + replay payload — via the Nexus SDK.
 
 Run from the repo root:
 
@@ -19,6 +18,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from typing import Optional
 from uuid import uuid4
 
 # Make the SDK and shared contracts importable from a plain checkout.
@@ -28,58 +28,99 @@ for p in (_repo_root, os.path.join(_repo_root, "packages", "sdk")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+from contracts.schema import DecisionRecord  # noqa: E402
 from nexus_sdk import record_decision  # noqa: E402
+
+# Default order used by main() — override in tests via run_agent().
+DEFAULT_ORDER = {
+    "order_id": "ORD-1042",
+    "amount": 500.00,
+    "customer_tier": "gold",
+    "reason_code": "item_not_as_described",
+}
 
 
 def decide_refund(order: dict) -> dict:
-    """Score candidate actions for a refund request and pick the best one.
+    """Score four candidate actions and pick the best one.
 
-    Returns a dict with `chosen`, `alternatives`, and `replay_payload`.
+    Candidates
+    ----------
+    full_refund   $500  — keeps the customer, costs most
+    partial_refund $200  — middle ground
+    escalate       $120  — route to a senior agent, lower immediate cost
+    deny+coupon    $30   — deny refund but issue a $30 coupon
+
+    Policy: gold-tier customers always get a full refund.
+
+    Returns
+    -------
+    dict with keys: ``chosen``, ``alternatives``, ``replay_payload``.
+    The ``replay_payload`` follows the multi-tool list convention so the replay
+    engine can REPLAYED query tools and SIMULATE side-effect tools.
     """
     amount = order["amount"]
     tier = order["customer_tier"]
 
-    # `cost` here = expected cost to the business of taking the action.
-    # A real agent would call tools / an LLM; this is a deterministic stub.
+    # cost = expected monetary cost to the business of taking the action.
     candidates = [
-        {"action": "full_refund", "cost": amount,
-         "reason": "keeps a high-value customer happy"},
-        {"action": "partial_refund", "cost": round(amount * 0.5, 2),
-         "reason": "splits the difference"},
-        {"action": "deny", "cost": 0.0,
-         "reason": "cheapest now, risks churn"},
+        {"action": "full_refund",   "cost": float(amount),       "reason": "retains gold customer"},
+        {"action": "partial_refund", "cost": 200.0,               "reason": "splits the difference"},
+        {"action": "escalate",       "cost": 120.0,               "reason": "senior agent handles it"},
+        {"action": "deny+coupon",    "cost": 30.0,                "reason": "cheapest; issue $30 coupon"},
     ]
 
-    # Simple policy: gold customers get full refunds; otherwise partial.
     chosen_action = "full_refund" if tier == "gold" else "partial_refund"
     chosen = next(c for c in candidates if c["action"] == chosen_action)
     alternatives = [c for c in candidates if c["action"] != chosen_action]
 
     replay_payload = {
-        "tool": "policy_engine.decide_refund",
-        "inputs": order,
-        "candidates": candidates,
-        "policy": "gold->full_refund else partial_refund",
+        "tools": [
+            # Query tool: looked up the order — return recorded outputs on replay.
+            {
+                "name": "order_lookup",
+                "type": "query",
+                "inputs": {"order_id": order["order_id"]},
+                "outputs": {
+                    "status": "delivered",
+                    "amount": float(amount),
+                    "days_since_delivery": 2,
+                    "customer_tier": tier,
+                },
+            },
+            # Side-effect tool: would execute the actual refund — must be SIMULATED.
+            {
+                "name": "refund_execute",
+                "type": "side_effect",
+                "inputs": {
+                    "order_id": order["order_id"],
+                    "amount": float(amount),
+                    "action": chosen_action,
+                },
+            },
+        ],
+        "policy": f"gold->full_refund (tier={tier})",
     }
     return {"chosen": chosen, "alternatives": alternatives, "replay_payload": replay_payload}
 
 
-def main() -> None:
-    run_id = f"refund-run-{uuid4().hex[:8]}"
-    server_url = os.environ.get("NEXUS_SERVER")  # optional
+def run_agent(
+    order: Optional[dict] = None,
+    run_id: Optional[str] = None,
+    server_url: Optional[str] = None,
+) -> DecisionRecord:
+    """Run the refund agent, record the decision, and return the DecisionRecord.
 
-    order = {
-        "order_id": "ORD-1042",
-        "amount": 120.00,
-        "customer_tier": "gold",
-        "reason_code": "item_not_as_described",
-    }
+    This is the importable entry point used by tests and the e2e script.
+    ``main()`` is a thin wrapper around this.
+    """
+    order = order or DEFAULT_ORDER
+    run_id = run_id or f"refund-run-{uuid4().hex[:8]}"
 
     t0 = time.perf_counter()
     result = decide_refund(order)
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
-    record = record_decision(
+    return record_decision(
         run_id=run_id,
         context=order,
         chosen=result["chosen"],
@@ -89,15 +130,21 @@ def main() -> None:
         server_url=server_url,
     )
 
+
+def main() -> None:
+    server_url = os.environ.get("NEXUS_SERVER")
+    record = run_agent(server_url=server_url)
+
     print(f"run_id      : {record.run_id}")
     print(f"decision_id : {record.decision_id}")
-    print(f"chosen      : {record.chosen['action']} (cost={record.chosen['cost']})")
+    print(f"chosen      : {record.chosen['action']} (cost=${record.chosen['cost']:.2f})")
     print("opportunity costs of discarded alternatives:")
     for opp in record.opportunity_costs():
-        print(f"  - {opp['action']:16s} cost={opp['cost']:<8} "
-              f"opportunity_cost={opp['opportunity_cost']}")
+        sign = "+" if (opp["opportunity_cost"] or 0) >= 0 else ""
+        print(f"  - {opp['action']:16s}  cost=${opp['cost']:<8.2f}  "
+              f"opp_cost={sign}{opp['opportunity_cost']:.2f}")
     if server_url:
-        print(f"\nshipped to {server_url}/decisions")
+        print(f"\nshipped → {server_url}/decisions")
     else:
         print("\n(set NEXUS_SERVER to ship this record to a running Nexus server)")
 

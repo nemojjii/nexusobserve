@@ -72,6 +72,12 @@ def get_run(run_id: str) -> dict:
     return {"run_id": run_id, "count": len(decisions), "decisions": decisions}
 
 
+@app.get("/runs/{run_id}/decisions")
+def get_run_decisions(run_id: str) -> dict:
+    """Alias for GET /decisions/{run_id} — RESTful path variant."""
+    return get_run(run_id)
+
+
 @app.get("/runs")
 def list_runs() -> dict:
     return {"runs": db.list_run_ids()}
