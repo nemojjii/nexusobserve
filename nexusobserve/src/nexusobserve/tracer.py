@@ -13,12 +13,13 @@ from typing import Any, Dict, List, Optional
 
 # -- Import the shared schema ------------------------------------------------
 # Try a normal import first; if contracts isn't on the path yet, bootstrap the
-# monorepo root (src/nexusobserve/tracer.py → root is four levels up).
+# monorepo root.  dirname(__file__) = nexusobserve/src/nexusobserve/;
+# three ".." steps reach the repo root that contains contracts/.
 try:
     from contracts.schema import DecisionRecord
 except ModuleNotFoundError:
     _here = os.path.dirname(os.path.abspath(__file__))
-    _repo_root = os.path.abspath(os.path.join(_here, "..", "..", "..", ".."))
+    _repo_root = os.path.abspath(os.path.join(_here, "..", "..", ".."))
     if _repo_root not in sys.path:
         sys.path.insert(0, _repo_root)
     from contracts.schema import DecisionRecord  # type: ignore

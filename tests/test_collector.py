@@ -1,15 +1,24 @@
-"""Tests for the Nexus Collector API (FastAPI TestClient — no live server)."""
+"""Tests for the Nexus Collector API (FastAPI TestClient — no live server).
+
+Skipped automatically when ``nexus_collector`` or ``fastapi`` are not installed
+(e.g. when only ``pip install -e nexusobserve`` was run).
+"""
 
 import json
 import sys
 import os
+
+import pytest
+
+# Skip the entire module if collector stack is not installed.
+pytest.importorskip("fastapi",        reason="fastapi not installed — skipping collector tests")
+pytest.importorskip("nexus_collector", reason="nexus_collector not installed — skipping collector tests")
 
 # Ensure repo root on path for contracts import bootstrapped by collector.
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
-import pytest
 from fastapi.testclient import TestClient
 
 from contracts.schema import DecisionRecord
