@@ -1,3 +1,6 @@
+// dashboard-lite talks only to the public Collector endpoints.
+// /aggregate is a hosted-tier feature and is not called here.
+
 const BASE = '/api'
 
 async function _json(path, opts = {}) {
@@ -11,9 +14,8 @@ async function _json(path, opts = {}) {
 
 export const getRuns = () => _json('/runs')
 
-export const getRunDecisions = (runId) => _json(`/runs/${encodeURIComponent(runId)}/decisions`)
-
-export const getAggregate = () => _json('/aggregate')
+export const getRunDecisions = (runId) =>
+  _json(`/runs/${encodeURIComponent(runId)}/decisions`)
 
 export const postReplay = (decisionId, alternativeAction) =>
   _json('/replay', {

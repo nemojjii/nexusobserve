@@ -1,8 +1,14 @@
-"""FastAPI app for Nexus — ingest and serve agent decision records.
+"""Nexus Collector — FastAPI app for ingesting and serving agent decision records.
 
-Stub implementation for the hackathon: enough to receive records from the SDK
-and serve them to the dashboard. The record shape is owned by the repo-root
-``contracts`` package (single source of truth).
+Public endpoints (open-source tier):
+  POST   /decisions              ingest one DecisionRecord
+  GET    /decisions/{run_id}     all decisions for a run
+  GET    /runs/{run_id}/decisions  (RESTful alias)
+  GET    /runs                   list known run IDs
+  POST   /replay                 replay a discarded alternative
+  GET    /health
+
+Aggregate / auth / multi-tenancy → Nexus hosted tier (private repo).
 """
 
 from __future__ import annotations
@@ -12,6 +18,7 @@ import os
 import sys
 
 # Bootstrap the monorepo root so `contracts` is importable when run from anywhere.
+# collector/nexus_collector/main.py → root is three levels up.
 _here = os.path.dirname(os.path.abspath(__file__))
 _repo_root = os.path.abspath(os.path.join(_here, "..", "..", ".."))
 if _repo_root not in sys.path:
@@ -25,9 +32,12 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from . import db  # noqa: E402
 from .replay import replay_decision  # noqa: E402
 
-app = FastAPI(title="Nexus Server", version="0.1.0")
+app = FastAPI(
+    title="Nexus Collector",
+    version="0.1.0",
+    description="Open-source collector for Nexus agent decision records.",
+)
 
-# The dashboard (React) runs on a different origin during development.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -74,7 +84,7 @@ def get_run(run_id: str) -> dict:
 
 @app.get("/runs/{run_id}/decisions")
 def get_run_decisions(run_id: str) -> dict:
-    """Alias for GET /decisions/{run_id} — RESTful path variant."""
+    """RESTful alias for GET /decisions/{run_id}."""
     return get_run(run_id)
 
 
@@ -83,53 +93,14 @@ def list_runs() -> dict:
     return {"runs": db.list_run_ids()}
 
 
-@app.get("/aggregate")
-def get_aggregate() -> dict:
-    """Aggregate metrics across all stored decisions.
-
-    total_opportunity_cost = sum of (chosen.cost - cheapest_alt.cost) per decision.
-    """
-    run_ids = db.list_run_ids()
-    total_decisions = 0
-    total_chosen_cost = 0.0
-    total_opportunity_cost = 0.0
-
-    for rid in run_ids:
-        for payload_json in db.get_decisions_for_run(rid):
-            record = from_json(payload_json)
-            total_decisions += 1
-            chosen_cost = float(record.chosen.get("cost") or 0)
-            total_chosen_cost += chosen_cost
-            alt_costs = [
-                float(a["cost"])
-                for a in record.alternatives
-                if a.get("cost") is not None
-            ]
-            if alt_costs:
-                savings = chosen_cost - min(alt_costs)
-                if savings > 0:
-                    total_opportunity_cost += savings
-
-    return {
-        "total_decisions": total_decisions,
-        "total_chosen_cost": round(total_chosen_cost, 2),
-        "total_opportunity_cost": round(total_opportunity_cost, 2),
-        "runs_count": len(run_ids),
-    }
-
-
 @app.post("/replay")
 async def replay(request: Request) -> dict:
     """Replay a discarded alternative and return the diff.
 
-    Request body JSON:
-        {"decision_id": "<uuid>", "alternative_action": "<action string>"}
+    Body: {"decision_id": "<uuid>", "alternative_action": "<action>"}
 
-    Response includes:
-        cost_delta          — chosen.cost - alt.cost  (always from captured values, no LLM)
-        tradeoffs           — any extra fields from replay_payload
-        replayed_tools      — query tools: recorded outputs; side-effect tools: SIMULATED
-        side_effects_executed — always 0 (contract guarantee)
+    cost_delta is computed from captured values only — no LLM calls.
+    side_effects_executed is always 0 (contract guarantee).
     """
     try:
         body = json.loads(await request.body())
