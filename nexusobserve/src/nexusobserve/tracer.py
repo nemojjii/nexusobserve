@@ -1,9 +1,4 @@
-"""Core tracer — build DecisionRecords and ship them to the Collector.
-
-The DecisionRecord schema lives in the repo-root ``contracts`` package (SSOT).
-This module locates it whether imported from an installed wheel or from a
-monorepo checkout.
-"""
+"""Core tracer — build DecisionRecords and ship them to the Collector."""
 
 from __future__ import annotations
 
@@ -11,18 +6,7 @@ import os
 import sys
 from typing import Any, Dict, List, Optional
 
-# -- Import the shared schema ------------------------------------------------
-# Try a normal import first; if contracts isn't on the path yet, bootstrap the
-# monorepo root.  dirname(__file__) = nexusobserve/src/nexusobserve/;
-# three ".." steps reach the repo root that contains contracts/.
-try:
-    from contracts.schema import DecisionRecord
-except ModuleNotFoundError:
-    _here = os.path.dirname(os.path.abspath(__file__))
-    _repo_root = os.path.abspath(os.path.join(_here, "..", "..", ".."))
-    if _repo_root not in sys.path:
-        sys.path.insert(0, _repo_root)
-    from contracts.schema import DecisionRecord  # type: ignore
+from .schema import DecisionRecord
 
 # -- Module-level local-mode flag --------------------------------------------
 _local_mode: bool = False
