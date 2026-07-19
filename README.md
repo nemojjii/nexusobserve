@@ -1,15 +1,16 @@
 # Nexus — AI Agent Decision Observability
 
 [![CI](https://github.com/nemojjii/nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/nemojjii/nexus/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> When an AI agent picks one option among several candidates, most tools only log what it *did*.  
+> When an AI agent picks one option among several candidates, most tools only log what it *did*.
 > **Nexus captures what it *didn't* do too** — chosen option + discarded alternatives + opportunity cost — and lets you **replay** any discarded alternative to diff the outcome.
 
 ```
 chosen + discarded alternatives + opportunity cost  →  replay  →  diff
 ```
 
-## 30초 예제 — 서버 없이 바로
+## 30-second example — no server needed
 
 ```bash
 pip install nexusobserve
@@ -18,7 +19,7 @@ pip install nexusobserve
 ```python
 import nexusobserve
 
-nexusobserve.init(local=True)          # 또는 환경변수 NEXUSOBSERVE_LOCAL=1
+nexusobserve.init(local=True)          # or set env var NEXUSOBSERVE_LOCAL=1
 
 nexusobserve.record_decision(
     run_id="order-run-001",
@@ -33,7 +34,7 @@ nexusobserve.record_decision(
 )
 ```
 
-실행하면 터미널에 즉시 출력됩니다 — 서버·가입 불필요:
+Running this prints straight to the terminal — no server, no signup required:
 
 ```
 [nexus] decision a1b2c3d4…
@@ -47,57 +48,57 @@ nexusobserve.record_decision(
   stored   → ~/.nexusobserve/decisions.jsonl
 ```
 
-기록된 결정 목록 조회:
+To view recorded decisions:
 
 ```bash
 python -m nexusobserve show
 ```
 
-Collector 서버와 연동하려면 `server_url` 파라미터를 추가하기만 하면 됩니다:
+To hook up a Collector server, just add the `server_url` parameter:
 
 ```python
 nexusobserve.record_decision(..., server_url="http://localhost:8000")
 ```
 
-## 한 방 실행
+## One-shot run
 
 ```bash
 ./run_demo.sh
 ```
 
-서버 기동 → 데모 데이터 적재 → 대시보드 오픈까지 한 번에.  
-`Ctrl+C` 한 번으로 모든 프로세스 정리.
+Starts the server → loads demo data → opens the dashboard, all in one go.
+A single `Ctrl+C` cleans up all processes.
 
-| 접속 | 주소 |
+| Access | URL |
 |---|---|
-| 대시보드 | http://localhost:5173 |
+| Dashboard | http://localhost:5173 |
 | Collector API | http://localhost:8000 |
 
-대시보드에서 회색 대안 노드를 클릭하면 replay diff 패널이 열립니다.
+Click a grey alternative node on the dashboard to open the replay diff panel.
 
 ---
 
-## 리포 구조
+## Repo structure
 
 ```
 nexusobserve/          SDK — pip install nexusobserve
-collector/             Collector — FastAPI + SQLite (pip install nexus-collector)
-dashboard-lite/        단일 런 버블그래프 + diff (npm run dev)
+collector/              Collector — FastAPI + SQLite (pip install nexus-collector)
+dashboard-lite/         Single-run bubble graph + diff (npm run dev)
 examples/
-  refund_agent/        데모 에이전트
-contracts/schema.py    DecisionRecord — 세 계층의 단일 진실 원천(SSOT)
+  refund_agent/         Demo agent
+contracts/schema.py     DecisionRecord — single source of truth (SSOT) across all three layers
 docs/
   ARCHITECTURE.md
   related-work.md
-run_demo.sh            ← 여기서 시작
-LICENSE                MIT
+run_demo.sh             ← start here
+LICENSE                 MIT
 ```
 
-**비공개 (추후 Nexus 호스팅):** 집계 · 인증 · 멀티테넌시 · 보관 · 팀 기능
+**Private (future Nexus hosting):** aggregation · auth · multi-tenancy · retention · team features
 
 ---
 
-## 아키텍처
+## Architecture
 
 ```
         ┌──────────────────────────────────────────────────────────────┐
@@ -112,59 +113,63 @@ LICENSE                MIT
    └─────────────────────────┘ └────────────────────┘ └────────────────────────┘
 ```
 
-1. **SDK** (`nexusobserve`) — `record_decision(...)` 한 줄로 에이전트를 계측.
-2. **Collector** (`nexus-collector`) — 결정 레코드를 SQLite에 저장. replay 엔진 내장.
-3. **Dashboard Lite** — 런별 결정 버블그래프; 대안 클릭 → cost_delta + SIMULATED 배지.
+1. **SDK** (`nexusobserve`) — instrument an agent with a single line: `record_decision(...)`.
+2. **Collector** (`nexus-collector`) — stores decision records in SQLite. Built-in replay engine.
+3. **Dashboard Lite** — per-run decision bubble graph; click an alternative → shows cost_delta + a SIMULATED badge.
 
 ---
 
-## DecisionRecord 스키마
+## DecisionRecord schema
 
-`contracts/schema.py` 에 표준 라이브러리만으로 정의. 의존성 없이 import 가능.
+Defined in `contracts/schema.py` using only the standard library. Importable with no dependencies.
 
-| 필드 | 타입 | 설명 |
+| Field | Type | Description |
 |---|---|---|
-| `decision_id` | str | uuid4 (자동 생성) |
-| `run_id` | str | 한 번의 에이전트 실행을 묶는 ID |
-| `timestamp` | float | 유닉스 에폭(자동) |
-| `context` | dict | 결정 당시 입력값 |
-| `chosen` | dict | 선택된 대안 `{action, cost, …}` |
-| `alternatives` | list | **버려진 대안들** `[{action, cost, …}, …]` |
-| `latency_ms` | float | 결정에 걸린 시간 |
-| `replay_payload` | dict | 재실행용 툴 입출력 기록 |
-| `schema_version` | int | 와이어 포맷 버전 |
+| `decision_id` | str | uuid4 (auto-generated) |
+| `run_id` | str | ID grouping a single agent run |
+| `timestamp` | float | Unix epoch (auto) |
+| `context` | dict | Input values at decision time |
+| `chosen` | dict | The selected alternative `{action, cost, …}` |
+| `alternatives` | list | **The discarded alternatives** `[{action, cost, …}, …]` |
+| `latency_ms` | float | Time taken to reach the decision |
+| `replay_payload` | dict | Recorded tool inputs/outputs for replay |
+| `schema_version` | int | Wire format version |
 
-기회비용은 파생 계산: `alternative.cost − chosen.cost` → `DecisionRecord.opportunity_costs()`
+Opportunity cost is a derived calculation: `alternative.cost − chosen.cost` → `DecisionRecord.opportunity_costs()`
 
 ---
 
-## 최초 설치 (한 번만)
+## First-time setup (once)
 
 ```bash
 pip install -e nexusobserve -e collector
 cd dashboard-lite && npm install && cd ..
 ```
 
-## 수동 실행
+## Manual run
 
 ```bash
-# 터미널 A — Collector
+# Terminal A — Collector
 PYTHONPATH="collector:." NEXUS_DB_PATH=nexus.db \
   uvicorn nexus_collector.main:app --reload
 
-# 터미널 B — 데모 에이전트
+# Terminal B — Demo agent
 NEXUS_SERVER=http://localhost:8000 \
   python examples/refund_agent/refund_agent.py
 
-# 터미널 C — 대시보드
+# Terminal C — Dashboard
 cd dashboard-lite && npm run dev
 ```
 
-## 스키마 검증
+## Schema validation
 
 ```bash
 python -c "from contracts.schema import DecisionRecord; print('ok')"
 ```
+
+## Contributing
+
+Issues and pull requests are welcome. Please open an issue to discuss significant changes before submitting a PR.
 
 ## License
 
@@ -173,3 +178,5 @@ python -c "from contracts.schema import DecisionRecord; print('ok')"
 ---
 
 *See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/related-work.md`](docs/related-work.md) for design rationale.*
+
+
